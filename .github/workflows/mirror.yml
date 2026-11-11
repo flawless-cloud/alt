@@ -1,0 +1,71 @@
+# The mirror of a site on GitHub Pages (restricted-networks design 6.4; plan R5). infra/github in
+# the site repository writes this file, mirror.js and mirror-config.json into each second path's
+# repository; edits made here are overwritten.
+#
+# Every 15 minutes and on demand: fetch the site's export and check every byte of it against what
+# the export vouches for, deploy it to this repository's Pages site unless the site already shows
+# this export revision and this bundle (script, workflow and config), check what is then served,
+# and keep the schedule alive (GitHub stops schedules after 60 days without activity). Holds no
+# secrets; actions pinned by commit.
+name: mirror
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch and check the export
+        id: fetch
+        run: |
+          origin="$(jq -r .origin mirror-config.json)"
+          target="$(jq -r .target mirror-config.json)"
+          bundle="$(cat mirror.js .github/workflows/mirror.yml mirror-config.json | sha256sum | cut -c1-64)"
+          result="$(node mirror.js fetch --origin "$origin" --target "$target" --out _site --bundle "$bundle")"
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: steps.fetch.outputs.result == 'deploy'
+        with:
+          path: _site
+          include-hidden-files: true
+
+      - id: deploy
+        if: steps.fetch.outputs.result == 'deploy'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+      - name: Check what the site serves
+        if: steps.fetch.outputs.result == 'deploy'
+        env:
+          TARGET: ${{ steps.fetch.outputs.target }}
+        run: node mirror.js verify --target "$TARGET" --dir _site
+
+      - name: Keep the schedule alive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh api -X PUT "repos/$REPOSITORY/actions/workflows/mirror.yml/enable"
