@@ -2,10 +2,12 @@
 # the site repository writes this file, mirror.js and mirror-config.json into each second path's
 # repository; edits made here are overwritten.
 #
-# Every 15 minutes and on demand: fetch the site's export and check every byte of it against what
-# the export vouches for, deploy it to this repository's Pages site unless the site already shows
-# this export revision and this bundle (script, workflow and config), check what is then served,
-# and keep the schedule alive (GitHub stops schedules after 60 days without activity). Holds no
+# Started by each release of the site, by the site's mirror trigger within minutes of a publication
+# (decision 87), and after each change to this file or the script; every 15 minutes as the last
+# backstop; and on demand. Fetches the site's export and checks every byte of it against what the
+# export vouches for, deploys it to this repository's Pages site unless the site already shows this
+# export revision and this bundle (script, workflow and config), checks what is then served, and
+# keeps the schedule alive (GitHub stops schedules after 60 days without activity). Holds no
 # secrets; actions pinned by commit.
 name: mirror
 
